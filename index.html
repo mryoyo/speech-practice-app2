@@ -107,6 +107,9 @@
       <div class="row"><span data-i18n="labels.ttsRate">ความเร็วเสียง</span><input type="range" id="rate" min="0.5" max="1.5" step="0.05" value="1"/></div>
       <div class="row"><span data-i18n="labels.ttsPitch">โทนเสียง</span><input type="range" id="pitch" min="0.5" max="2" step="0.05" value="1"/></div>
       <div class="row"><span data-i18n="labels.ttsVolume">ระดับเสียง</span><input type="range" id="volume" min="0" max="1" step="0.05" value="1"/></div>
+      <div class="row"><span data-i18n="labels.voice">เสียงพูด</span>
+        <select id="voiceSelect"></select>
+      </div>
     </div>
   </dialog>
 
@@ -144,6 +147,8 @@
         'labels.ttsRate': 'ความเร็วเสียง',
         'labels.ttsPitch': 'โทนเสียง',
         'labels.ttsVolume': 'ระดับเสียง',
+        'labels.voice': 'เสียงพูด',
+        'labels.voiceAuto': 'อัตโนมัติ',
         'status.speaking': 'กำลังพูด…',
         'status.ready': 'พร้อม',
         'sync.fetching': 'กำลังดึงบทเรียน…',
@@ -165,6 +170,8 @@
         'labels.ttsRate': 'Speech Rate',
         'labels.ttsPitch': 'Pitch',
         'labels.ttsVolume': 'Volume',
+        'labels.voice': 'Voice',
+        'labels.voiceAuto': 'Auto',
         'status.speaking': 'Speaking…',
         'status.ready': 'Ready',
         'sync.fetching': 'Fetching lessons…',
@@ -190,7 +197,7 @@
 
     let lessons = /** @type {Lesson[]} */([])
 
-    const settings = store.load('settings', { uiLang:'th', tts: { rate: 1, pitch: 1, volume: 1 } })
+    const settings = store.load('settings', { uiLang:'th', tts: { rate: 1, pitch: 1, volume: 1, voicePrefs: {} } })
 
     function t(key){ const dict = I18N[settings.uiLang] || I18N.th; return dict[key] || key }
     function applyI18n(){
@@ -204,7 +211,8 @@
     }
 
     /* ----------------------- Language helpers ----------------------- */
-    function baseLang(tag){ return String(tag||'').split(/[-_]/)[0].toLowerCase() }
+    function normalizeTag(tag){ return String(tag||'').toLowerCase() }
+    function baseLang(tag){ return normalizeTag(tag).split(/[-_]/)[0] }
     function langBadge(tag){ const b = baseLang(tag); return b ? b.toUpperCase() : '?' }
 
     /* ----------------------- Render Library ----------------------- */
@@ -224,7 +232,7 @@
       })
     }
 
-    function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])) }
+    function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;','\'':'&#39;'}[c])) }
 
     /* ----------------------- Lesson view ----------------------- */
     let current = { lessonId: null, index: 0, speaking: false }
@@ -244,7 +252,8 @@
         row.querySelector('.play').addEventListener('click', () => play(i))
         list.appendChild(row)
       })
-      // Warn if lesson language voice missing
+      // Populate voice list for this lesson language
+      populateVoiceSelect(l.language)
       ensureVoiceAvailability(l)
       updateStatus(t('status.ready'))
       refreshControls()
@@ -254,26 +263,33 @@
     let voices = []
     const voiceReady = new Promise(resolve => {
       function load(){ voices = speechSynthesis.getVoices(); if(voices && voices.length) resolve() }
-      load(); speechSynthesis.onvoiceschanged = load
+      load(); speechSynthesis.onvoiceschanged = () => { voices = speechSynthesis.getVoices(); populateVoiceSelect(currentLesson()?.language); }
       setTimeout(resolve, 1500)
     })
 
-    function findVoiceFor(tag, nameHint){
-      const desired = String(tag||'').toLowerCase()
-      const base = baseLang(tag)
-      const pool = voices.filter(v => {
-        const L = (v.lang || '').toLowerCase()
-        return L === desired || L.startsWith(desired) || L.split('-')[0] === base
+    function getMatchingVoices(tag){
+      const want = normalizeTag(tag), base = baseLang(tag)
+      return voices.filter(v => {
+        const L = normalizeTag(v.lang)
+        return L === want || L.startsWith(want) || L.split('-')[0] === base
       })
+    }
+    function selectedVoiceNameFor(tag){
+      const want = normalizeTag(tag)
+      return settings.tts.voicePrefs?.[want] || settings.tts.voicePrefs?.[baseLang(tag)] || null
+    }
+    function findVoiceFor(tag, nameHint){
+      const pool = getMatchingVoices(tag)
+      const pref = selectedVoiceNameFor(tag)
       if(nameHint){ const exact = pool.find(v => v.name === nameHint); if(exact) return exact }
+      if(pref){ const picked = pool.find(v => v.name === pref); if(picked) return picked }
       return pool.find(v => v.localService) || pool[0] || null
     }
-
     function resolveUtterLang(tag, voice){
       if(voice && voice.lang) return voice.lang
-      const base = baseLang(tag)
-      if(base === 'th') return 'th-TH'
-      if(base === 'en') return 'en-US'
+      const b = baseLang(tag)
+      if(b === 'th') return 'th-TH'
+      if(b === 'en') return 'en-US'
       return tag || 'en-US'
     }
 
@@ -332,6 +348,34 @@
 
     function updateStatus(txt){ $('#status').textContent = txt }
     function clamp(n,min,max){ return Math.max(min, Math.min(max, n)) }
+
+    /* ---------- Voice select UI ---------- */
+    function populateVoiceSelect(tag){
+      const sel = document.getElementById('voiceSelect'); if(!sel) return
+      const list = getMatchingVoices(tag || currentLesson()?.language)
+      sel.innerHTML = ''
+      const optAuto = document.createElement('option'); optAuto.value = ''; optAuto.textContent = t('labels.voiceAuto'); sel.appendChild(optAuto)
+      list.forEach(v => {
+        const o = document.createElement('option')
+        o.value = v.name; o.textContent = `${v.name} (${v.lang}${v.localService?'·local':''})`
+        sel.appendChild(o)
+      })
+      const pref = selectedVoiceNameFor(tag)
+      sel.value = pref || ''
+    }
+
+    document.getElementById('voiceSelect')?.addEventListener('change', (e) => {
+      const l = currentLesson(); if(!l) return
+      const keyFull = normalizeTag(l.language); const keyBase = baseLang(l.language)
+      settings.tts.voicePrefs = settings.tts.voicePrefs || {}
+      const val = e.target.value || null
+      if(val) settings.tts.voicePrefs[keyFull] = val
+      else {
+        delete settings.tts.voicePrefs[keyFull]
+        delete settings.tts.voicePrefs[keyBase]
+      }
+      store.save('settings', settings)
+    })
 
     function ensureVoiceAvailability(lesson){
       const base = baseLang(lesson.language)

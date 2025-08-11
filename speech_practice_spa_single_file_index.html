@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ฝึกการออกเสียง • Speech Practice</title>
+  <style>
+    :root{
+      --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --text:#e5e7eb; --accent:#22c55e; --accent-2:#38bdf8; --danger:#ef4444; --card:#0b1220; --border:#1f2937; --shadow:0 8px 30px rgba(0,0,0,.25);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:linear-gradient(120deg,#0b1020,#0e162e 60%,#0b1220);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,"Noto Sans Thai",Tahoma,sans-serif}
+    button,input,select{font:inherit;color:inherit}
+    .app{display:grid;grid-template-rows:auto 1fr auto;min-height:100vh}
+    header{display:flex;gap:.75rem;align-items:center;justify-content:space-between;padding:.75rem 1rem;border-bottom:1px solid var(--border);backdrop-filter:saturate(1.3) blur(8px);position:sticky;top:0;background:rgba(15,23,42,.7)}
+    .brand{display:flex;align-items:center;gap:.6rem}
+    .brand .logo{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:var(--shadow)}
+    .brand h1{font-size:1rem;margin:0;font-weight:700}
+    .actions{display:flex;align-items:center;gap:.5rem}
+    .btn{display:inline-flex;align-items:center;gap:.5rem;border:1px solid var(--border);background:rgba(255,255,255,.02);padding:.5rem .75rem;border-radius:999px;cursor:pointer}
+    .btn:hover{border-color:#334155;background:rgba(255,255,255,.04)}
+    .btn.primary{background:linear-gradient(135deg,rgba(56,189,248,.15),rgba(34,197,94,.15));border-color:#334155}
+
+    main{display:grid;grid-template-columns:1fr;gap:1rem;padding:1rem}
+    @media(min-width:1024px){ main{grid-template-columns:320px 1fr} }
+
+    .panel{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow)}
+    .panel h2{margin:0;padding:1rem;border-bottom:1px solid var(--border);font-size:.95rem;color:#cbd5e1}
+
+    .library{display:flex;flex-direction:column}
+    .library .content{padding:.75rem;display:grid;grid-template-columns:1fr;gap:.5rem}
+    .lesson-item{display:flex;gap:.75rem;align-items:center;padding:.6rem;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.02);cursor:pointer}
+    .lesson-item:hover{background:rgba(255,255,255,.04)}
+    .lesson-cover{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#1d4ed8,#9333ea)}
+    .lesson-meta{display:flex;flex-direction:column;gap:.15rem}
+    .lesson-meta .title{font-weight:600}
+    .lesson-meta .sub{font-size:.8rem;color:var(--muted)}
+
+    .lesson{display:flex;flex-direction:column}
+    .lesson .content{padding:.75rem;display:flex;flex-direction:column;gap:.5rem}
+    .item-row{display:flex;align-items:center;gap:.6rem;padding:.6rem;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.02)}
+    .item-row .index{width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:rgba(56,189,248,.15);font-size:.8rem}
+    .item-row .text{flex:1}
+    .item-row .play{border:none;background:rgba(34,197,94,.15);padding:.35rem .6rem;border-radius:999px;cursor:pointer}
+
+    .player{position:sticky;bottom:0;border-top:1px solid var(--border);backdrop-filter:saturate(1.3) blur(8px);background:rgba(15,23,42,.7)}
+    .player .bar{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.5rem 1rem}
+    .controls{display:flex;gap:.5rem;align-items:center}
+    .control{border:1px solid var(--border);background:#101827;padding:.6rem .8rem;border-radius:12px;cursor:pointer}
+    .control:disabled{opacity:.5;cursor:not-allowed}
+    .status{font-size:.85rem;color:var(--muted)}
+
+    dialog{border:1px solid var(--border);border-radius:16px;background:var(--card);color:var(--text);box-shadow:var(--shadow);padding:0;max-width:480px}
+    .sheet{padding:1rem}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin:.5rem 0}
+    .row input[type="range"]{width:55%}
+    .hidden{display:none!important}
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <h1 id="appTitle">ฝึกการออกเสียง</h1>
+      </div>
+      <div class="actions">
+        <button class="btn" id="settingsBtn">⚙️ <span data-i18n="labels.settings">การตั้งค่า</span></button>
+        <select class="btn" id="langToggle" aria-label="UI language">
+          <option value="th">ไทย</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel library" aria-label="library">
+        <h2 data-i18n="library.title">เพลย์ลิสต์บทเรียน</h2>
+        <div class="content" id="library"></div>
+      </section>
+
+      <section class="panel lesson" aria-label="lesson">
+        <h2 id="lessonTitle">—</h2>
+        <div class="content" id="lessonItems"></div>
+      </section>
+    </main>
+
+    <footer class="player">
+      <div class="bar">
+        <div class="status" id="status">พร้อม</div>
+        <div class="controls">
+          <button class="control" id="prevBtn" title="Previous" data-i18n-title="actions.prev">⏮︎</button>
+          <button class="control" id="playBtn" title="Play" data-i18n-title="actions.play">▶︎</button>
+          <button class="control" id="playNextBtn" title="Play & Next" data-i18n-title="actions.playNext">▶︎➔</button>
+          <button class="control" id="nextBtn" title="Next" data-i18n-title="actions.next">⏭︎</button>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Settings -->
+  <dialog id="settingsDialog">
+    <div class="sheet">
+      <div class="row"><strong data-i18n="labels.settings">การตั้งค่า</strong><button class="btn" id="closeSettings">✕</button></div>
+      <div class="row"><span data-i18n="labels.uiLanguage">ภาษาแอป</span>
+        <select id="uiLang"><option value="th">ไทย</option><option value="en">English</option></select>
+      </div>
+      <div class="row"><span data-i18n="labels.ttsRate">ความเร็วเสียง</span><input type="range" id="rate" min="0.5" max="1.5" step="0.05" value="1"/></div>
+      <div class="row"><span data-i18n="labels.ttsPitch">โทนเสียง</span><input type="range" id="pitch" min="0.5" max="2" step="0.05" value="1"/></div>
+      <div class="row"><span data-i18n="labels.ttsVolume">ระดับเสียง</span><input type="range" id="volume" min="0" max="1" step="0.05" value="1"/></div>
+    </div>
+  </dialog>
+
+  <!-- Sync popup -->
+  <dialog id="syncDialog">
+    <div class="sheet">
+      <div class="row"><strong id="syncTitle">กำลังดึงบทเรียน…</strong></div>
+      <div class="row"><progress id="syncProgress" max="100" value="0" style="width:100%"></progress></div>
+      <div class="row"><span id="syncStatus">0 / 0</span></div>
+    </div>
+  </dialog>
+
+  <!-- YAML parser -->
+  <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+
+  <script>
+  ;(() => {
+    /* ---------- Config: hardcoded lesson URLs (YAML only) ---------- */
+    // Place your YAML files at these paths or adjust as needed.
+    const LESSON_URLS = [
+      'lessons/daily-activities-th.yaml',
+      'lessons/daily-activities-en.yaml'
+    ]
+
+    /* ----------------------- i18n ----------------------- */
+    const I18N = {
+      th: {
+        'app.title': 'ฝึกการออกเสียง',
+        'library.title': 'เพลย์ลิสต์บทเรียน',
+        'actions.play': 'เล่น',
+        'actions.playNext': 'เล่นและถัดไป',
+        'actions.prev': 'ย้อนกลับ',
+        'actions.next': 'ถัดไป',
+        'labels.settings': 'การตั้งค่า',
+        'labels.uiLanguage': 'ภาษาแอป',
+        'labels.ttsRate': 'ความเร็วเสียง',
+        'labels.ttsPitch': 'โทนเสียง',
+        'labels.ttsVolume': 'ระดับเสียง',
+        'status.speaking': 'กำลังพูด…',
+        'status.ready': 'พร้อม',
+        'sync.fetching': 'กำลังดึงบทเรียน…',
+        'sync.done': 'ซิงค์บทเรียนเสร็จแล้ว',
+        'errors.parse': 'ไม่สามารถอ่านไฟล์ได้',
+        'errors.schema': 'ข้อมูลไม่ถูกต้อง',
+        'errors.ttsUnavailable': 'เบราว์เซอร์ไม่รองรับข้อความเป็นเสียง',
+        'errors.fetch': 'ไม่สามารถดึงบทเรียนได้'
+      },
+      en: {
+        'app.title': 'Speech Practice',
+        'library.title': 'Lesson Playlists',
+        'actions.play': 'Play',
+        'actions.playNext': 'Play & Next',
+        'actions.prev': 'Previous',
+        'actions.next': 'Next',
+        'labels.settings': 'Settings',
+        'labels.uiLanguage': 'UI Language',
+        'labels.ttsRate': 'Speech Rate',
+        'labels.ttsPitch': 'Pitch',
+        'labels.ttsVolume': 'Volume',
+        'status.speaking': 'Speaking…',
+        'status.ready': 'Ready',
+        'sync.fetching': 'Fetching lessons…',
+        'sync.done': 'Lessons synced',
+        'errors.parse': 'File could not be parsed',
+        'errors.schema': 'Invalid data',
+        'errors.ttsUnavailable': 'Speech Synthesis not supported',
+        'errors.fetch': 'Failed to fetch lessons'
+      }
+    }
+
+    const $ = sel => document.querySelector(sel)
+    const $$ = sel => Array.from(document.querySelectorAll(sel))
+
+    /* ----------------------- Storage ----------------------- */
+    const store = {
+      load(key, fallback){ try { return JSON.parse(localStorage.getItem(key)) ?? fallback } catch { return fallback } },
+      save(key, val){ localStorage.setItem(key, JSON.stringify(val)) }
+    }
+
+    /* ----------------------- Data ----------------------- */
+    /** @typedef {{id:string,title:string,language:'th'|'en',description?:string,items:string[],voiceHint?:string}} Lesson */
+
+    let lessons = /** @type {Lesson[]} */([])
+
+    const settings = store.load('settings', { uiLang:'th', tts: { rate: 1, pitch: 1, volume: 1 } })
+
+    function t(key){ const dict = I18N[settings.uiLang] || I18N.th; return dict[key] || key }
+    function applyI18n(){
+      $('#appTitle').textContent = t('app.title')
+      $$('[data-i18n]').forEach(el => el.textContent = t(el.getAttribute('data-i18n')))
+      $$('[data-i18n-title]').forEach(el => el.setAttribute('title', t(el.getAttribute('data-i18n-title'))))
+      $('#langToggle').value = settings.uiLang
+      $('#uiLang').value = settings.uiLang
+      $('#status').textContent = t('status.ready')
+      $('#syncTitle').textContent = t('sync.fetching')
+    }
+
+    /* ----------------------- Render Library ----------------------- */
+    function renderLibrary(){
+      const wrap = $('#library'); wrap.innerHTML = ''
+      lessons.forEach(ls => {
+        const row = document.createElement('button')
+        row.className = 'lesson-item'; row.setAttribute('data-id', ls.id)
+        row.innerHTML = `
+          <div class="lesson-cover" aria-hidden="true"></div>
+          <div class="lesson-meta">
+            <div class="title">${escapeHtml(ls.title)}</div>
+            <div class="sub">${ls.language.toUpperCase()} · ${ls.items.length} ${t('labels.items') || 'Items'}</div>
+          </div>`
+        row.addEventListener('click', () => openLesson(ls.id))
+        wrap.appendChild(row)
+      })
+    }
+
+    function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])) }
+
+    /* ----------------------- Lesson view ----------------------- */
+    let current = { lessonId: null, index: 0, speaking: false }
+
+    function openLesson(id){
+      const l = lessons.find(x => x.id === id); if(!l) return
+      current.lessonId = id; current.index = 0
+      store.save('lastSession', { lessonId: id, index: 0 })
+      $('#lessonTitle').textContent = l.title
+      const list = $('#lessonItems'); list.innerHTML = ''
+      l.items.forEach((text, i) => {
+        const row = document.createElement('div'); row.className = 'item-row'
+        row.innerHTML = `
+          <div class="index">${i+1}</div>
+          <div class="text">${escapeHtml(text)}</div>
+          <button class="play" aria-label="${t('actions.play')}" data-i="${i}">▶︎</button>`
+        row.querySelector('.play').addEventListener('click', () => play(i))
+        list.appendChild(row)
+      })
+      updateStatus(t('status.ready'))
+      refreshControls()
+    }
+
+    /* ----------------------- Player / TTS ----------------------- */
+    let voices = []
+    const voiceReady = new Promise(resolve => {
+      function load(){ voices = speechSynthesis.getVoices(); if(voices && voices.length) resolve() }
+      load(); speechSynthesis.onvoiceschanged = load
+      setTimeout(resolve, 1500)
+    })
+
+    function pickVoice(langHint, nameHint){
+      const pool = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith(langHint))
+      if(nameHint){ const exact = pool.find(v => v.name === nameHint); if(exact) return exact }
+      const local = pool.find(v => v.localService) || pool[0]
+      return local
+    }
+
+    function speak(text, lang, nameHint){
+      if(!('speechSynthesis' in window)) { alert(t('errors.ttsUnavailable')); return }
+      speechSynthesis.cancel()
+      const u = new SpeechSynthesisUtterance(text)
+      u.rate = Number($('#rate').value || settings.tts.rate) || 1
+      u.pitch = Number($('#pitch').value || settings.tts.pitch) || 1
+      u.volume = Number($('#volume').value || settings.tts.volume) || 1
+      u.lang = lang
+      const v = pickVoice(lang, nameHint); if(v) u.voice = v
+      u.onstart = () => { current.speaking = true; updateStatus(t('status.speaking')); refreshControls() }
+      u.onend = () => { current.speaking = false; updateStatus(t('status.ready')); refreshControls() }
+      speechSynthesis.speak(u)
+    }
+
+    function currentLesson(){ return lessons.find(x => x.id === current.lessonId) }
+
+    function play(i = current.index){
+      const l = currentLesson(); if(!l) return
+      current.index = clamp(i, 0, l.items.length - 1)
+      speak(l.items[current.index], l.language === 'th' ? 'th-TH' : 'en-US', l.voiceHint)
+    }
+    function playAndNext(){
+      const l = currentLesson(); if(!l) return
+      const i = clamp(current.index, 0, l.items.length - 1)
+      if(!l.items[i]) return
+      const text = l.items[i]
+      if(!('speechSynthesis' in window)) { alert(t('errors.ttsUnavailable')); return }
+      speechSynthesis.cancel()
+      const u = new SpeechSynthesisUtterance(text)
+      u.rate = Number($('#rate').value || settings.tts.rate) || 1
+      u.pitch = Number($('#pitch').value || settings.tts.pitch) || 1
+      u.volume = Number($('#volume').value || settings.tts.volume) || 1
+      u.lang = l.language === 'th' ? 'th-TH' : 'en-US'
+      const v = pickVoice(u.lang, l.voiceHint); if(v) u.voice = v
+      u.onstart = () => { current.speaking = true; updateStatus(t('status.speaking')); refreshControls() }
+      u.onend = () => { current.speaking = false; next(); updateStatus(t('status.ready')); refreshControls() }
+      speechSynthesis.speak(u)
+    }
+    function prev(){ const l = currentLesson(); if(!l) return; current.index = clamp(current.index - 1, 0, l.items.length - 1); refreshControls() }
+    function next(){ const l = currentLesson(); if(!l) return; current.index = clamp(current.index + 1, 0, l.items.length - 1); refreshControls() }
+
+    function refreshControls(){
+      const l = currentLesson(); const has = !!l
+      $('#playBtn').disabled = !has
+      $('#playNextBtn').disabled = !has
+      $('#prevBtn').disabled = !has || current.index === 0
+      $('#nextBtn').disabled = !has || (has && current.index >= l.items.length - 1)
+    }
+
+    function updateStatus(txt){ $('#status').textContent = txt }
+    function clamp(n,min,max){ return Math.max(min, Math.min(max, n)) }
+
+    /* ----------------------- Sync lessons (YAML only) ----------------------- */
+    async function loadYamlLesson(url){
+      const res = await fetch(url)
+      if(!res.ok) throw new Error('HTTP '+res.status)
+      const text = await res.text()
+      const data = jsyaml.load(text)
+      return validateLesson(data)
+    }
+
+    function validateLesson(obj){
+      if(!obj || typeof obj !== 'object') throw new Error('Invalid')
+      const { id, title, language, items, description, voiceHint } = obj
+      if(!id || !title || !language || !Array.isArray(items) || items.length === 0) throw new Error('Schema')
+      if(!['th','en'].includes(language)) throw new Error('Lang')
+      const cleanItems = items.map(x => String(x)).filter(Boolean)
+      return { id:String(id), title:String(title), language, description: description? String(description): undefined, items: cleanItems, voiceHint: voiceHint? String(voiceHint): undefined }
+    }
+
+    async function syncLessons(){
+      const dlg = $('#syncDialog'); const prog = $('#syncProgress'); const stat = $('#syncStatus'); const title = $('#syncTitle')
+      dlg.showModal(); prog.max = LESSON_URLS.length; prog.value = 0; stat.textContent = `0 / ${LESSON_URLS.length}`
+      const fetched = []
+      for(let i=0;i<LESSON_URLS.length;i++){
+        try { fetched.push(await loadYamlLesson(LESSON_URLS[i])) }
+        catch(e){ console.error('fetch failed', LESSON_URLS[i], e) }
+        prog.value = i+1; stat.textContent = `${i+1} / ${LESSON_URLS.length}`
+      }
+      lessons = fetched
+      renderLibrary()
+      const last = store.load('lastSession', null)
+      if(last && lessons.find(l => l.id === last.lessonId)) openLesson(last.lessonId)
+      else if(lessons[0]) openLesson(lessons[0].id)
+      title.textContent = t('sync.done')
+      setTimeout(() => dlg.close(), 900)
+    }
+
+    /* ----------------------- Settings ----------------------- */
+    $('#settingsBtn').addEventListener('click', () => $('#settingsDialog').showModal())
+    $('#closeSettings').addEventListener('click', () => $('#settingsDialog').close())
+
+    $('#uiLang').addEventListener('change', (e) => { settings.uiLang = e.target.value; store.save('settings', settings); applyI18n(); renderLibrary() })
+    $('#langToggle').addEventListener('change', (e) => { settings.uiLang = e.target.value; store.save('settings', settings); applyI18n(); renderLibrary() })
+
+    ;['rate','pitch','volume'].forEach(k => {
+      document.getElementById(k).addEventListener('input', (e) => { settings.tts[k] = Number(e.target.value); store.save('settings', settings) })
+    })
+
+    /* ----------------------- Player bindings ----------------------- */
+    $('#playBtn').addEventListener('click', () => play())
+    $('#playNextBtn').addEventListener('click', () => playAndNext())
+    $('#prevBtn').addEventListener('click', () => prev())
+    $('#nextBtn').addEventListener('click', () => next())
+
+    window.addEventListener('keydown', (e) => {
+      if(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if(e.code === 'Space'){ e.preventDefault(); play() }
+      if(e.code === 'ArrowRight'){ next() }
+      if(e.code === 'ArrowLeft'){ prev() }
+    })
+
+    /* ----------------------- Boot ----------------------- */
+    applyI18n(); syncLessons(); voiceReady.then(() => {})
+  })()
+  </script>
+</body>
+</html>

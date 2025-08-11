@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ฝึกการออกเสียง • Speech Practice</title>
   <style>
-    :root{
-      --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --text:#e5e7eb; --accent:#22c55e; --accent-2:#38bdf8; --danger:#ef4444; --card:#0b1220; --border:#1f2937; --shadow:0 8px 30px rgba(0,0,0,.25);
-    }
+    :root{ --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --text:#e5e7eb; --accent:#22c55e; --accent-2:#38bdf8; --danger:#ef4444; --card:#0b1220; --border:#1f2937; --shadow:0 8px 30px rgba(0,0,0,.25); }
     *{box-sizing:border-box}
     html,body{height:100%}
     body{margin:0;background:linear-gradient(120deg,#0b1020,#0e162e 60%,#0b1220);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,"Noto Sans Thai",Tahoma,sans-serif}
@@ -127,7 +125,6 @@
   <script>
   ;(() => {
     /* ---------- Config: hardcoded lesson URLs (YAML only) ---------- */
-    // Place your YAML files at these paths or adjust as needed.
     const LESSON_URLS = [
       'lessons/daily-activities-th.yaml',
       'lessons/daily-activities-en.yaml'
@@ -189,7 +186,7 @@
     }
 
     /* ----------------------- Data ----------------------- */
-    /** @typedef {{id:string,title:string,language:'th'|'en',description?:string,items:string[],voiceHint?:string}} Lesson */
+    /** @typedef {{id:string,title:string,language:string,description?:string,items:string[],voiceHint?:string}} Lesson */
 
     let lessons = /** @type {Lesson[]} */([])
 
@@ -206,6 +203,10 @@
       $('#syncTitle').textContent = t('sync.fetching')
     }
 
+    /* ----------------------- Language helpers ----------------------- */
+    function baseLang(tag){ return String(tag||'').split(/[-_]/)[0].toLowerCase() }
+    function langBadge(tag){ const b = baseLang(tag); return b ? b.toUpperCase() : '?' }
+
     /* ----------------------- Render Library ----------------------- */
     function renderLibrary(){
       const wrap = $('#library'); wrap.innerHTML = ''
@@ -216,7 +217,7 @@
           <div class="lesson-cover" aria-hidden="true"></div>
           <div class="lesson-meta">
             <div class="title">${escapeHtml(ls.title)}</div>
-            <div class="sub">${ls.language.toUpperCase()} · ${ls.items.length} ${t('labels.items') || 'Items'}</div>
+            <div class="sub">${langBadge(ls.language)} · ${ls.items.length} ${t('labels.items') || 'Items'}</div>
           </div>`
         row.addEventListener('click', () => openLesson(ls.id))
         wrap.appendChild(row)
@@ -243,6 +244,8 @@
         row.querySelector('.play').addEventListener('click', () => play(i))
         list.appendChild(row)
       })
+      // Warn if lesson language voice missing
+      ensureVoiceAvailability(l)
       updateStatus(t('status.ready'))
       refreshControls()
     }
@@ -255,22 +258,36 @@
       setTimeout(resolve, 1500)
     })
 
-    function pickVoice(langHint, nameHint){
-      const pool = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith(langHint))
+    function findVoiceFor(tag, nameHint){
+      const desired = String(tag||'').toLowerCase()
+      const base = baseLang(tag)
+      const pool = voices.filter(v => {
+        const L = (v.lang || '').toLowerCase()
+        return L === desired || L.startsWith(desired) || L.split('-')[0] === base
+      })
       if(nameHint){ const exact = pool.find(v => v.name === nameHint); if(exact) return exact }
-      const local = pool.find(v => v.localService) || pool[0]
-      return local
+      return pool.find(v => v.localService) || pool[0] || null
     }
 
-    function speak(text, lang, nameHint){
+    function resolveUtterLang(tag, voice){
+      if(voice && voice.lang) return voice.lang
+      const base = baseLang(tag)
+      if(base === 'th') return 'th-TH'
+      if(base === 'en') return 'en-US'
+      return tag || 'en-US'
+    }
+
+    function speakWithLesson(text, lesson){
       if(!('speechSynthesis' in window)) { alert(t('errors.ttsUnavailable')); return }
+      const v = findVoiceFor(lesson.language, lesson.voiceHint)
+      const utterLang = resolveUtterLang(lesson.language, v)
       speechSynthesis.cancel()
       const u = new SpeechSynthesisUtterance(text)
       u.rate = Number($('#rate').value || settings.tts.rate) || 1
       u.pitch = Number($('#pitch').value || settings.tts.pitch) || 1
       u.volume = Number($('#volume').value || settings.tts.volume) || 1
-      u.lang = lang
-      const v = pickVoice(lang, nameHint); if(v) u.voice = v
+      u.lang = utterLang
+      if(v) u.voice = v
       u.onstart = () => { current.speaking = true; updateStatus(t('status.speaking')); refreshControls() }
       u.onend = () => { current.speaking = false; updateStatus(t('status.ready')); refreshControls() }
       speechSynthesis.speak(u)
@@ -281,7 +298,7 @@
     function play(i = current.index){
       const l = currentLesson(); if(!l) return
       current.index = clamp(i, 0, l.items.length - 1)
-      speak(l.items[current.index], l.language === 'th' ? 'th-TH' : 'en-US', l.voiceHint)
+      speakWithLesson(l.items[current.index], l)
     }
     function playAndNext(){
       const l = currentLesson(); if(!l) return
@@ -289,13 +306,15 @@
       if(!l.items[i]) return
       const text = l.items[i]
       if(!('speechSynthesis' in window)) { alert(t('errors.ttsUnavailable')); return }
+      const v = findVoiceFor(l.language, l.voiceHint)
+      const utterLang = resolveUtterLang(l.language, v)
       speechSynthesis.cancel()
       const u = new SpeechSynthesisUtterance(text)
       u.rate = Number($('#rate').value || settings.tts.rate) || 1
       u.pitch = Number($('#pitch').value || settings.tts.pitch) || 1
       u.volume = Number($('#volume').value || settings.tts.volume) || 1
-      u.lang = l.language === 'th' ? 'th-TH' : 'en-US'
-      const v = pickVoice(u.lang, l.voiceHint); if(v) u.voice = v
+      u.lang = utterLang
+      if(v) u.voice = v
       u.onstart = () => { current.speaking = true; updateStatus(t('status.speaking')); refreshControls() }
       u.onend = () => { current.speaking = false; next(); updateStatus(t('status.ready')); refreshControls() }
       speechSynthesis.speak(u)
@@ -314,6 +333,18 @@
     function updateStatus(txt){ $('#status').textContent = txt }
     function clamp(n,min,max){ return Math.max(min, Math.min(max, n)) }
 
+    function ensureVoiceAvailability(lesson){
+      const base = baseLang(lesson.language)
+      if(base === 'th'){
+        const hasThai = voices.some(v => (v.lang||'').toLowerCase().startsWith('th'))
+        if(!hasThai){
+          alert(settings.uiLang === 'th'
+            ? 'ไม่พบเสียงภาษาไทยในอุปกรณ์ กรุณาติดตั้งเสียงภาษาไทยในระบบก่อนใช้งาน'
+            : 'No Thai voice found on this device. Please install a Thai TTS voice in system settings.')
+        }
+      }
+    }
+
     /* ----------------------- Sync lessons (YAML only) ----------------------- */
     async function loadYamlLesson(url){
       const res = await fetch(url)
@@ -327,9 +358,8 @@
       if(!obj || typeof obj !== 'object') throw new Error('Invalid')
       const { id, title, language, items, description, voiceHint } = obj
       if(!id || !title || !language || !Array.isArray(items) || items.length === 0) throw new Error('Schema')
-      if(!['th','en'].includes(language)) throw new Error('Lang')
       const cleanItems = items.map(x => String(x)).filter(Boolean)
-      return { id:String(id), title:String(title), language, description: description? String(description): undefined, items: cleanItems, voiceHint: voiceHint? String(voiceHint): undefined }
+      return { id:String(id), title:String(title), language:String(language), description: description? String(description): undefined, items: cleanItems, voiceHint: voiceHint? String(voiceHint): undefined }
     }
 
     async function syncLessons(){
@@ -375,7 +405,9 @@
     })
 
     /* ----------------------- Boot ----------------------- */
-    applyI18n(); syncLessons(); voiceReady.then(() => {})
+    applyI18n();
+    voiceReady.then(() => {});
+    syncLessons();
   })()
   </script>
 </body>
